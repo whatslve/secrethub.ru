@@ -84,9 +84,10 @@ class AuthController extends Controller
 
         // Подписка прошла — создаём или обновляем пользователя
         $telegramId = $data['id'] ?? null;
+
         if (!$telegramId) {
-            Log::error('telegram.missing_id', $data);
-            return response()->json(['error' => 'missing id'], 400);
+            Log::error('telegram.missing_id', ['data' => $data]);
+            return response()->json(['error' => 'missing telegram id'], 400);
         }
 
         $user = User::updateOrCreate(
@@ -94,13 +95,10 @@ class AuthController extends Controller
             [
                 'name' => trim(($data['first_name'] ?? '') . ' ' . ($data['last_name'] ?? '')),
                 'username' => $data['username'] ?? null,
-                //'photo_url' => $data['photo_url'] ?? null,
-                // пароль нужен в базе, заполняем рандомно
-                'email' => 'none@none.ru',
+                'photo_url' => $data['photo_url'] ?? null,
                 'password' => bcrypt(Str::random(40)),
             ]
         );
-
         // Выдача Sanctum токена (если используешь Sanctum)
         $token = $user->createToken('api')->plainTextToken;
 
