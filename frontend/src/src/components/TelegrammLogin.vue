@@ -1,10 +1,7 @@
 <template>
   <div>
-    <!-- Контейнер виджета показываем только если нет авторизованного user -->
-    <div v-if="!user" id="telegram-login-container"></div>
-
-    <!-- Приветствие + выход -->
-    <div v-else class="user-block">
+    <div id="telegram-login-container" v-show="!user"></div>
+    <div class="user-block" v-show="user">
       <p>Привет, {{ user.name }}!</p>
       <button @click="logout">Выйти</button>
     </div>
