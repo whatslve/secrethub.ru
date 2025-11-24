@@ -77,8 +77,7 @@ onMounted(() => {
     widgetScript.setAttribute('data-telegram-login', TELEGRAM_BOT);
     widgetScript.setAttribute('data-size', 'large');
     widgetScript.setAttribute('data-request-access', 'write');
-    // callback вместо redirect:
-    widgetScript.setAttribute('data-onauth', 'onTelegramAuth'); // fallback in case some browsers expect that
+    // callback вместо redirect:// fallback in case some browsers expect that
     // also make sure the widget will call window.TelegramLoginWidget.onAuth
     // append
     container.appendChild(widgetScript);
