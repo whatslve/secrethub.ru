@@ -8,8 +8,20 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import api, { setAuthToken } from '@/plugins/axios.js';
-
+onMounted(() => {
+  const container = document.getElementById('telegram-login-container');
+  if (container) {
+    const observer = new MutationObserver((mutations) => {
+      console.log('Mutations:', mutations);
+    });
+    observer.observe(container, { childList: true });
+  } else {
+    console.error('Telegram container not found!');
+  }
+});
 const user = ref(null);
+const container = document.getElementById('telegram-login-container');
+console.log('container:', container); // должно быть не null
 
 onMounted(() => {
   // Определяем глобальную callback-функцию
