@@ -5,5 +5,5 @@
 </template>
 
 <script setup>
-import TelegramLogin from './components/TelegramLogin.vue';
+import TelegramLogin from './components/TelegrammLogin.vue';
 </script>
