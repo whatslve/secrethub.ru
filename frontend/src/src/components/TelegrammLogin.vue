@@ -1,8 +1,10 @@
 <template>
   <div>
+    <!-- контейнер всегда есть, просто скрываем через v-show -->
     <div id="telegram-login-container" v-show="!user"></div>
+
     <div class="user-block" v-show="user">
-      <p>Привет, {{ user.name }}!</p>
+      <p>Привет, {{ user?.name }}!</p> <!-- безопасная навигация -->
       <button @click="logout">Выйти</button>
     </div>
   </div>
