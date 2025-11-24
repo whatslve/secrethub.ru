@@ -1,6 +1,7 @@
 <template>
   <div>
     <div v-if="!user" id="telegram-login-container"></div>
+
     <div v-else class="user-block">
       <p>Привет, {{ user.name }}!</p>
       <button @click="logout">Выйти</button>
@@ -16,6 +17,23 @@ const user = ref(null)
 
 const log = (...args) =>
     console.log('[TG_AUTH]', new Date().toISOString(), ...args)
+
+// ----------------------
+// ЛОГИКА ВЫХОДА
+// ----------------------
+const logout = () => {
+  log('Logout clicked')
+
+  // 1. очищаем память
+  localStorage.removeItem('user')
+  localStorage.removeItem('token')
+
+  // 2. сбрасываем axios
+  setAuthToken(null)
+
+  // 3. показываем Telegram кнопку
+  user.value = null
+}
 
 onMounted(() => {
   log('Component mounted — starting init')
@@ -36,7 +54,7 @@ onMounted(() => {
     return
   }
 
-  // глобальный хэндлер
+  // Глобальный обработчик
   window.onTelegramAuth = async (telegramUser) => {
     log('Received telegramUser:', telegramUser)
 
@@ -67,7 +85,7 @@ onMounted(() => {
 
   log('Defined window.onTelegramAuth')
 
-  // вставляем виджет
+  // вставляем виджет Telegram
   const script = document.createElement('script')
   script.src = 'https://telegram.org/js/telegram-widget.js?7'
   script.async = true
