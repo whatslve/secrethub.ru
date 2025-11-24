@@ -8,7 +8,6 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue';
 import api, { setAuthToken } from '@/plugins/axios.js';
-
 const user = ref(null);
 
 // Попробуем достать пользователя из localStorage при монтировании
@@ -33,6 +32,13 @@ onMounted(() => {
 
       container.appendChild(script);
 
+      if (storedUser && storedToken) {
+        user.value = JSON.parse(storedUser);
+        setAuthToken(storedToken);
+        console.log('Loaded user from localStorage:', user.value);
+      }
+
+// После авторизации через Telegram
       window.TelegramLoginWidget = {
         onAuth: async (telegramUser) => {
           try {
@@ -41,8 +47,8 @@ onMounted(() => {
 
             setAuthToken(token);
             user.value = res.data.user;
+            console.log('User after Telegram login:', user.value);
 
-            // Сохраняем данные для повторных визитов
             localStorage.setItem('user', JSON.stringify(res.data.user));
             localStorage.setItem('token', token);
           } catch (err) {
