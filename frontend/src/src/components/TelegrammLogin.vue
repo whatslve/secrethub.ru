@@ -43,6 +43,15 @@ function removeWidgetScript() {
     container.innerHTML = '';
   }
 }
+fetch('/api/auth/telegram', {
+  method: 'POST',
+  headers: {'Content-Type': 'application/json'},
+  body: JSON.stringify({test: 'ping'})
+}).then(async r => {
+  console.log('[TG_PING] status', r.status);
+  const t = await r.text();
+  try { console.log('[TG_PING] body', JSON.parse(t)); } catch(e) { console.log('[TG_PING] body text', t); }
+}).catch(e => console.error('[TG_PING] fetch error', e));
 
 // Создание и вставка скрипта виджета + регистрация onAuth
 function createAndInsertWidget() {
