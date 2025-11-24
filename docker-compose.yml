@@ -55,7 +55,7 @@ services:
       - backend
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.myapp.rule=Host(`yourdomain.com`)"
+      - "traefik.http.routers.myapp.rule=Host(`secrethub.club`)"
       - "traefik.http.routers.myapp.entrypoints=websecure"
       - "traefik.http.routers.myapp.tls=true"
       - "traefik.http.routers.myapp.tls.certresolver=letsencrypt"
@@ -69,7 +69,7 @@ services:
       - "--providers.docker.exposedbydefault=false"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
-      - "--certificatesresolvers.letsencrypt.acme.email=youremail@domain.com"
+      - "--certificatesresolvers.letsencrypt.acme.email=whatslve@gmail.com.com"
       - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
       - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
     ports:
