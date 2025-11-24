@@ -11,3 +11,10 @@ Route::middleware('auth:sanctum')->get('/user', function(Request $request) {
 Route::get('/', function () {
     return 'API SOURCE';
 });
+
+Route::middleware('auth:sanctum')->post('/logout', function (Request $request) {
+    // Удаляем токен, которым пользователь авторизован
+    $request->user()->currentAccessToken()->delete();
+
+    return response()->json(['message' => 'Logged out']);
+});
