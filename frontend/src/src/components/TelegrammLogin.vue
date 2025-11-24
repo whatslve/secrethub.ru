@@ -1,51 +1,66 @@
 <template>
   <div>
-    <div id="telegram-login-container"></div>
-    <p v-if="user">Привет, {{ user.name }}!</p>
+    <div v-if="!user" id="telegram-login-container"></div>
+    <p v-else>Привет, {{ user.name }}!</p>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import api, { setAuthToken } from '@/plugins/axios.js';
-onMounted(() => {
-  const container = document.getElementById('telegram-login-container');
-  if (container) {
-    const observer = new MutationObserver((mutations) => {
-      console.log('Mutations:', mutations);
-    });
-    observer.observe(container, { childList: true });
-  } else {
-    console.error('Telegram container not found!');
-  }
-});
+
 const user = ref(null);
-const container = document.getElementById('telegram-login-container');
-console.log('container:', container); // должно быть не null
 
+// Попробуем достать пользователя из localStorage при монтировании
 onMounted(() => {
-  // Определяем глобальную callback-функцию
-  window.onTelegramAuth = async (telegramUser) => {
-    console.log('Telegram raw user:', telegramUser);
-    try {
-      const res = await api.post('/auth/telegram', telegramUser);
-      const token = res.data.token;
-      setAuthToken(token);
-      console.log('API response:', res.data);
-      user.value = res.data.user;
-    } catch (err) {
-      console.error('Ошибка авторизации:', err.response?.data || err.message);
+  const storedUser = localStorage.getItem('user');
+  const storedToken = localStorage.getItem('token');
+  if (storedUser && storedToken) {
+    user.value = JSON.parse(storedUser);
+    setAuthToken(storedToken);
+  }
+
+  // Наблюдаем за DOM, чтобы вставить Telegram виджет
+  const observer = new MutationObserver((mutations, obs) => {
+    const container = document.getElementById('telegram-login-container');
+    if (container && !user.value) {
+      const script = document.createElement('script');
+      script.src = 'https://telegram.org/js/telegram-widget.js?7';
+      script.async = true;
+      script.setAttribute('data-telegram-login', 'secrethubclubbot');
+      script.setAttribute('data-size', 'large');
+      script.setAttribute('data-request-access', 'write');
+
+      container.appendChild(script);
+
+      window.TelegramLoginWidget = {
+        onAuth: async (telegramUser) => {
+          try {
+            const res = await api.post('/auth/telegram', telegramUser);
+            const token = res.data.token;
+
+            setAuthToken(token);
+            user.value = res.data.user;
+
+            // Сохраняем данные для повторных визитов
+            localStorage.setItem('user', JSON.stringify(res.data.user));
+            localStorage.setItem('token', token);
+          } catch (err) {
+            console.error('Ошибка авторизации:', err.response?.data || err.message);
+          }
+        }
+      };
+
+      obs.disconnect(); // больше не нужно наблюдать
     }
-  };
+  });
 
-  const script = document.createElement('script');
-  script.src = 'https://telegram.org/js/telegram-widget.js?22';
-  script.async = true;
-  script.setAttribute('data-telegram-login', 'secrethubclubbot');
-  script.setAttribute('data-size', 'large');
-  script.setAttribute('data-request-access', 'write');
-  script.setAttribute('data-onauth', 'onTelegramAuth'); // вот этот атрибут
-
-  document.getElementById('telegram-login-container').appendChild(script);
+  observer.observe(document.body, { childList: true, subtree: true });
 });
 </script>
+
+<style scoped>
+#telegram-login-container {
+  margin-top: 2em;
+}
+</style>
