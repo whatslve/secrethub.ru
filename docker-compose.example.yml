@@ -34,6 +34,8 @@ services:
     volumes:
       - ./frontend/src:/app   # dev: монтируем код (если хотите билдить в образе — уберите этот том)
     restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
     environment:
       - VUE_APP_API_URL=http://localhost:${NGINX_PORT:-80}  # в dev внешний nginx на хосте
     depends_on:
@@ -51,34 +53,6 @@ services:
     depends_on:
       - frontend
       - backend
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.myapp.rule=Host(`secrethub.club`)"
-      - "traefik.http.routers.myapp.entrypoints=websecure"
-      - "traefik.http.routers.myapp.tls=true"
-      - "traefik.http.routers.myapp.tls.certresolver=letsencrypt"
-
-  traefik:
-    image: traefik:v3.0
-    container_name: traefik
-    restart: unless-stopped
-    command:
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--entrypoints.web.address=:80"
-      - "--entrypoints.websecure.address=:443"
-      - "--certificatesresolvers.letsencrypt.acme.email=whatslve@gmail.com"
-      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
-      - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
-    ports:
-      - "80:80"
-      - "443:443"
-      - "8080:8080"
-    volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
-      - "./traefik/letsencrypt:/letsencrypt"
-    labels:
-      - "traefik.enable=true"
 
   db:
     image: postgres:15-alpine
