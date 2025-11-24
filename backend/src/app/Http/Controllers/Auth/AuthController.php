@@ -22,6 +22,9 @@ class AuthController extends Controller
         if (!hash_equals($hash, $calculated_hash)) {
             return response()->json(['error' => 'invalid telegram data'], 401);
         }
+        \Log::info('Telegram check string: ' . $check_string);
+        \Log::info('Calculated hash: ' . $calculated_hash);
+        \Log::info('Received hash: ' . $hash);
         // Найти или создать пользователя
         $user = User::firstOrCreate(
             ['telegram_id' => $data['id']],
