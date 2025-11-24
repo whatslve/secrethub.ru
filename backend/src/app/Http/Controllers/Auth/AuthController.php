@@ -99,7 +99,7 @@ class AuthController extends Controller
                 'email' => 'none@none.com',
                 'password' => bcrypt(Str::random(40)),
             ]
-        );g
+        );
         // Выдача Sanctum токена (если используешь Sanctum)
         $token = $user->createToken('api')->plainTextToken;
 
