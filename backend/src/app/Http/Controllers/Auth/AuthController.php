@@ -95,7 +95,8 @@ class AuthController extends Controller
             [
                 'name' => trim(($data['first_name'] ?? '') . ' ' . ($data['last_name'] ?? '')),
                 'username' => $data['username'] ?? null,
-                'photo_url' => $data['photo_url'] ?? null,
+                //'photo_url' => $data['photo_url'] ?? null,
+                'email' => 'none@none.com',
                 'password' => bcrypt(Str::random(40)),
             ]
         );
