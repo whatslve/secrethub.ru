@@ -1,3 +1,13 @@
+<template>
+  <div>
+    <div v-if="!user" id="telegram-login-container"></div>
+    <div v-else class="user-block">
+      <p>Привет, {{ user.name }}!</p>
+      <button @click="logout">Выйти</button>
+    </div>
+  </div>
+</template>
+
 <script setup>
 import { ref, onMounted } from 'vue'
 import api, { setAuthToken } from '@/plugins/axios.js'
