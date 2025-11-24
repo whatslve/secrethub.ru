@@ -20,8 +20,8 @@ class AuthController extends Controller
         foreach ($data as $key => $value) {
             $check_array[] = "$key=$value";
         }
-        $check_string = implode("\n", $check_array);
-
+        ksort($check_array, SORT_STRING); // сортировка по ключам
+        $check_string = implode("\n", $check_array); // строго \n, без \r
         $secret_key = hash_hmac('sha256', env('TELEGRAM_BOT_TOKEN'), true);
         $calculated_hash = hash_hmac('sha256', $check_string, $secret_key);
         var_dump('Telegram check string: ' . $check_string);
