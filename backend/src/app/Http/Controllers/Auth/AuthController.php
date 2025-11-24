@@ -19,12 +19,13 @@ class AuthController extends Controller
         $check_string = implode("\n", array_map(fn($k, $v) => "$k=$v", array_keys($data), $data));
         $secret_key = hash_hmac('sha256', env('TELEGRAM_BOT_TOKEN'), true);
         $calculated_hash = hash_hmac('sha256', $check_string, $secret_key);
-        if (!hash_equals($hash, $calculated_hash)) {
-            return response()->json(['error' => 'invalid telegram data'], 401);
-        }
         var_dump('Telegram check string: ' . $check_string);
         var_dump('Calculated hash: ' . $calculated_hash);
         var_dump('Received hash: ' . $hash);
+        if (!hash_equals($hash, $calculated_hash)) {
+            return response()->json(['error' => 'invalid telegram data'], 401);
+        }
+
         // Найти или создать пользователя
         $user = User::firstOrCreate(
             ['telegram_id' => $data['id']],
