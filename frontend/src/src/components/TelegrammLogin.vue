@@ -20,32 +20,43 @@ const log = (...args) => console.log('[TG_AUTH]', ...args)
 // --------------------------------------------------
 // — ГАРАНТИРОВАННО ПЕРЕРИСОВЫВАЕТ TELEGRAM-КНОПКУ —
 // --------------------------------------------------
-const renderTelegramWidget = () => {
-  const container = document.getElementById('telegram-login-container')
-  if (!container) return
+function renderWidget() {
+  log('Rendering Telegram widget');
 
-  log('Rendering Telegram widget')
+  const container = document.getElementById('telegram-login-container');
+  container.innerHTML = '';
 
-  // Полный сброс
-  container.innerHTML = ''
+  // IMPORTANT — колбэк ДОЛЖЕН быть в window ДО вставки скрипта
+  window.onTelegramAuth = async (telegramUser) => {
+    log('TG CALLBACK', telegramUser);
 
-  // ⚠️ Telegram кеширует одно и то же URL, поэтому добавляем "cache buster"
-  const cacheBuster = Date.now()
+    try {
+      const res = await api.post('/auth/telegram', telegramUser);
+      log('Backend OK:', res.data);
 
-  const script = document.createElement('script')
-  script.src = `https://telegram.org/js/telegram-widget.js?7&t=${cacheBuster}`
-  script.async = true
+      const { token, user: returned } = res.data;
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(returned));
 
-  script.setAttribute('data-telegram-login', 'secrethubclubbot')
-  script.setAttribute('data-size', 'large')
-  script.setAttribute('data-userpic', 'false')
-  script.setAttribute('data-onauth', 'onTelegramAuth(user)')
-  script.setAttribute('data-request-access', 'write')
+      setAuthToken(token);
+      user.value = returned;
+    } catch (e) {
+      log('Backend error:', e?.response?.data || e);
+    }
+  };
 
-  container.appendChild(script)
+  const s = document.createElement('script');
+  s.src = 'https://telegram.org/js/telegram-widget.js?7';
+  s.async = true;
+  s.setAttribute('data-telegram-login', TELEGRAM_BOT);
+  s.setAttribute('data-size', 'large');
+  s.setAttribute('data-request-access', 'write');
+  s.setAttribute('data-onauth', 'onTelegramAuth(user)');
 
-  log('Widget appended', script.src)
+  container.appendChild(s);
+  log('Widget appended', s.src);
 }
+
 
 
 // --------------------------------------------------
