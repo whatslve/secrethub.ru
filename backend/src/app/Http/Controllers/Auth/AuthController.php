@@ -25,9 +25,6 @@ class AuthController extends Controller
 
         $secret_key = hash_hmac('sha256', env('TELEGRAM_BOT_TOKEN'), true);
         $calculated_hash = hash_hmac('sha256', $check_string, $secret_key);
-        var_dump('Telegram check string: ' . $check_string);
-        var_dump('Calculated hash: ' . $calculated_hash);
-        var_dump('Received hash: ' . $hash);
         if (!hash_equals($hash, $calculated_hash)) {
             return response()->json(['error' => 'invalid telegram data'], 401);
         }
