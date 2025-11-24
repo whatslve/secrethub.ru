@@ -96,6 +96,7 @@ class AuthController extends Controller
                 'username' => $data['username'] ?? null,
                 //'photo_url' => $data['photo_url'] ?? null,
                 // пароль нужен в базе, заполняем рандомно
+                'email' => 'none@none.ru',
                 'password' => bcrypt(Str::random(40)),
             ]
         );
