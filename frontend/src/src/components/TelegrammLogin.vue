@@ -12,27 +12,26 @@ import api, { setAuthToken } from '@/plugins/axios.js';
 const user = ref(null);
 
 onMounted(() => {
+  // Определяем глобальную callback-функцию
+  window.onTelegramAuth = async (telegramUser) => {
+    try {
+      const res = await api.post('/auth/telegram', telegramUser);
+      const token = res.data.token;
+      setAuthToken(token);
+      user.value = res.data.user;
+    } catch (err) {
+      console.error('Ошибка авторизации:', err.response?.data || err.message);
+    }
+  };
+
   const script = document.createElement('script');
-  script.src = 'https://telegram.org/js/telegram-widget.js?7';
+  script.src = 'https://telegram.org/js/telegram-widget.js?22';
   script.async = true;
   script.setAttribute('data-telegram-login', 'secrethubclubbot');
   script.setAttribute('data-size', 'large');
-  // НЕ ставим data-auth-url
   script.setAttribute('data-request-access', 'write');
+  script.setAttribute('data-onauth', 'onTelegramAuth'); // вот этот атрибут
 
   document.getElementById('telegram-login-container').appendChild(script);
-
-  window.TelegramLoginWidget = {
-    onAuth: async (telegramUser) => {
-      try {
-        const res = await api.post('/auth/telegram', telegramUser);
-        const token = res.data.token;
-        setAuthToken(token);
-        user.value = res.data.user;
-      } catch (err) {
-        console.error('Ошибка авторизации:', err.response?.data || err.message);
-      }
-    }
-  };
 });
 </script>
