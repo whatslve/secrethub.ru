@@ -14,10 +14,12 @@ const user = ref(null);
 onMounted(() => {
   // Определяем глобальную callback-функцию
   window.onTelegramAuth = async (telegramUser) => {
+    console.log('Telegram raw user:', telegramUser);
     try {
       const res = await api.post('/auth/telegram', telegramUser);
       const token = res.data.token;
       setAuthToken(token);
+      console.log('API response:', res.data);
       user.value = res.data.user;
     } catch (err) {
       console.error('Ошибка авторизации:', err.response?.data || err.message);
