@@ -2,7 +2,7 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-use app\Http\Controllers\Auth\AuthController;
+use App\Http\Controllers\Auth\AuthController;
 
 Route::match(['get', 'post'], 'auth/telegram', [AuthController::class, 'loginTG']);
 Route::middleware('auth:sanctum')->get('/user', function(Request $request) {
