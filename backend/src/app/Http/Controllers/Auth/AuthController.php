@@ -67,11 +67,6 @@ class AuthController extends Controller
         // HMAC-SHA256 of data_check_string using secretKeyBinary
         $calculatedHash = hash_hmac('sha256', $checkString, $secretKeyBinary);
 
-        // Логи для дебага — ПОТОМ УДАЛИТЬ
-        Log::debug('telegram.check_string', ['str' => $checkString]);
-        Log::debug('telegram.calculated_hash', ['calc' => $calculatedHash]);
-        Log::debug('telegram.received_hash', ['recv' => $receivedHash]);
-
         // Сравниваем безопасно
         if (!hash_equals($calculatedHash, $receivedHash)) {
             Log::warning('telegram.signature_mismatch', [
@@ -84,7 +79,6 @@ class AuthController extends Controller
 
         // Подписка прошла — создаём или обновляем пользователя
         $telegramId = $data['id'] ?? null;
-        var_dump($telegramId);
         if (!$telegramId) {
             Log::error('telegram.missing_id', ['data' => $data]);
             return response()->json(['error' => 'missing telegram id'], 400);
