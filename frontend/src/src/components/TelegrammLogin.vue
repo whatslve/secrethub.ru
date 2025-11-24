@@ -1,9 +1,6 @@
 <template>
   <div>
-    <!-- Контейнер виджета показываем только если нет авторизованного user -->
     <div v-if="!user" id="telegram-login-container"></div>
-
-    <!-- Приветствие + выход -->
     <div v-else class="user-block">
       <p>Привет, {{ user.name }}!</p>
       <button @click="logout">Выйти</button>
@@ -18,198 +15,163 @@ import api, { setAuthToken } from '@/plugins/axios.js';
 const TAG = '[TG_AUTH]';
 const log = (...args) => console.log(TAG, new Date().toISOString(), ...args);
 
-const TELEGRAM_BOT = 'secrethubclubbot'; // <- поменяй на свой, если нужно
+const TELEGRAM_BOT = 'secrethubclubbot'; // ← замени на имя своего бота
 const POLL_INTERVAL_MS = 500;
-const POLL_MAX_ATTEMPTS = 12; // ~6 секунд
+const POLL_MAX_ATTEMPTS = 12;
 
 const user = ref(null);
-let widgetScript = null;
 let pollTimer = null;
 
-// Устанавливаем токен/удаляем его в axios через setAuthToken (предполагаем, что плагин реализует это)
+// Удаление сессии на клиенте
 function clearSessionClientSide() {
   localStorage.removeItem('user');
   localStorage.removeItem('token');
   setAuthToken(null);
   user.value = null;
-  log('Cleared local session');
+  log('Cleared client session');
 }
 
-// Удаляем вставленный скрипт (если есть)
+// Удаление старого скрипта Telegram виджета
 function removeWidgetScript() {
-  try {
-    const container = document.getElementById('telegram-login-container');
-    if (container) {
-      const existing = container.querySelector('script[data-tg-widget]');
-      if (existing) {
-        existing.remove();
-        log('Removed existing widget script element');
-      }
-      // очистим контейнер излишков
-      container.innerHTML = '';
+  const container = document.getElementById('telegram-login-container');
+  if (container) {
+    const existing = container.querySelector('script[data-tg-widget]');
+    if (existing) {
+      existing.remove();
+      log('Removed old widget script');
     }
-    widgetScript = null;
-  } catch (e) {
-    log('Error removing widget script:', e);
+    container.innerHTML = '';
   }
 }
 
-// Основная функция вставки виджета
+// Создание и вставка скрипта виджета + регистрация onAuth
 function createAndInsertWidget() {
-  try {
-    const container = document.getElementById('telegram-login-container');
-    if (!container) {
-      log('createAndInsertWidget: container not found');
-      return false;
-    }
-
-    // Удалим старое содержимое, если есть
-    container.innerHTML = '';
-
-    // Регистрируем глобальную callback-функцию ДО вставки скрипта
-    window.TelegramLoginWidget = {
-      onAuth: async (telegramUser) => {
-        log('onAuth called (raw):', telegramUser);
-        try {
-          log('Posting to backend /auth/telegram ...');
-          const res = await api.post('/auth/telegram', telegramUser);
-          // Логируем full response (status + data). Не отправляй сюда приватные токены в чат.
-          log('Backend response status:', res.status);
-          log('Backend response data:', res.data);
-
-          const token = res.data.token;
-          const returnedUser = res.data.user;
-
-          if (!token || !returnedUser) {
-            log('Backend did not return token/user. Response:', res.data);
-            return;
-          }
-
-          // Устанавливаем токен для axios
-          setAuthToken(token);
-          // Сохраняем user и token
-          localStorage.setItem('user', JSON.stringify(returnedUser));
-          localStorage.setItem('token', token);
-          user.value = returnedUser;
-
-          log('Login success. User set locally:', returnedUser);
-        } catch (err) {
-          log('Error during backend auth POST:', err?.response?.status, err?.response?.data || err.message || err);
-        }
-      }
-    };
-
-    // для совместимости: некоторые интеграции используют data-onauth="onTelegramAuth"
-    // создаём глобальную функцию-алиас (без перезаписи, если уже есть)
-    if (typeof window.onTelegramAuth !== 'function') {
-      window.onTelegramAuth = (u) => window.TelegramLoginWidget.onAuth(u);
-      log('Defined global alias window.onTelegramAuth');
-    }
-
-    // Создаём скрипт виджета
-    const script = document.createElement('script');
-    script.src = 'https://telegram.org/js/telegram-widget.js?22';
-    script.async = true;
-    script.setAttribute('data-telegram-login', TELEGRAM_BOT);
-    script.setAttribute('data-size', 'large');
-    script.setAttribute('data-request-access', 'write');
-    // НЕ ставим data-auth-url чтобы не было redirect
-    // Маркер чтобы потом легко найти / удалить
-    script.setAttribute('data-tg-widget', '1');
-
-    container.appendChild(script);
-    widgetScript = script;
-
-    log('Widget script appended to container');
-    return true;
-  } catch (e) {
-    log('createAndInsertWidget error:', e);
+  const container = document.getElementById('telegram-login-container');
+  if (!container) {
+    log('Container for Telegram widget not found');
     return false;
   }
+
+  container.innerHTML = '';
+
+  // Глобальная callback-функция для Telegram Login Widget
+  window.TelegramLoginWidget = {
+    onAuth: async (telegramUser) => {
+      log('onAuth called with telegramUser:', telegramUser);
+
+      try {
+        log('Sending data to backend /auth/telegram …');
+        const res = await api.post('/auth/telegram', telegramUser);
+
+        log('Backend response status:', res.status);
+        log('Backend response data:', res.data);
+
+        const token = res.data.token;
+        const returnedUser = res.data.user;
+
+        if (!token || !returnedUser) {
+          log('Invalid backend response: token or user missing', res.data);
+          return;
+        }
+
+        setAuthToken(token);
+        localStorage.setItem('user', JSON.stringify(returnedUser));
+        localStorage.setItem('token', token);
+        user.value = returnedUser;
+
+        log('User set after login:', returnedUser);
+      } catch (err) {
+        log('Error in onAuth:', err?.response?.status, err?.response?.data || err.message || err);
+      }
+    }
+  };
+
+  // Альтернативная глобальная функция (для data-onauth)
+  if (typeof window.onTelegramAuth !== 'function') {
+    window.onTelegramAuth = (u) => window.TelegramLoginWidget.onAuth(u);
+    log('Defined global alias onTelegramAuth');
+  }
+
+  const script = document.createElement('script');
+  script.src = 'https://telegram.org/js/telegram-widget.js?22';
+  script.async = true;
+  script.setAttribute('data-telegram-login', TELEGRAM_BOT);
+  script.setAttribute('data-size', 'large');
+  script.setAttribute('data-request-access', 'write');
+  script.setAttribute('data-tg-widget', '1');
+  // Добавляем data-onauth, чтобы убедиться, что callback сработает
+  script.setAttribute('data-onauth', 'onTelegramAuth');
+
+  container.appendChild(script);
+  log('Appended Telegram widget script');
+
+  return true;
 }
 
-// Будем пытаться вставить виджет с небольшим polling-ом, если контейнер ещё не существует
+// Попытка вставить виджет с ретраями, если контейнера нет сразу
 function ensureWidgetInsertedWithRetry() {
-  removeWidgetScript(); // очистка на всякий случай
+  removeWidgetScript();
   let attempts = 0;
-  if (pollTimer) clearInterval(pollTimer);
   pollTimer = setInterval(() => {
     attempts++;
     const ok = createAndInsertWidget();
     if (ok) {
+      log('Widget successfully inserted after', attempts, 'attempts');
       clearInterval(pollTimer);
       pollTimer = null;
-      log('Widget inserted after', attempts, 'attempt(s)');
     } else if (attempts >= POLL_MAX_ATTEMPTS) {
+      log('Failed to insert widget after max attempts:', POLL_MAX_ATTEMPTS);
       clearInterval(pollTimer);
       pollTimer = null;
-      log('Widget insert failed after max attempts:', POLL_MAX_ATTEMPTS);
     } else {
-      log('Widget insert attempt', attempts, 'failed — retrying...');
+      log('Retrying widget insert, attempt', attempts);
     }
   }, POLL_INTERVAL_MS);
 }
 
-// Logout: вызывается кнопкой. Чистим и заново вставляем виджет
+// Logout: сброс сессии + вставка виджета заново
 async function logout() {
-  log('Logout triggered');
-  // Попробуем вызвать backend logout (опционально) — если защищено Sanctum, будет 401 если нет токена
+  log('Logout initiated');
   try {
     await api.post('/logout');
     log('Backend logout OK');
   } catch (e) {
-    log('Backend logout failed or not implemented:', e?.response?.status, e?.response?.data || e.message || e);
+    log('Backend logout failed or not implemented:', e?.response?.status, e?.response?.data || e.message);
   }
 
-  // Клиентская очистка
   clearSessionClientSide();
-
-  // Удаляем старый скрипт и заново ставим виджет
   removeWidgetScript();
   ensureWidgetInsertedWithRetry();
 }
 
-// При размонтировании — чистим таймеры и глобальные объекты
+// Очистка при размонтировании компонента
 onBeforeUnmount(() => {
-  try {
-    if (pollTimer) {
-      clearInterval(pollTimer);
-      pollTimer = null;
-    }
-    removeWidgetScript();
-    try { delete window.TelegramLoginWidget; } catch (e) { window.TelegramLoginWidget = undefined; }
-    try { delete window.onTelegramAuth; } catch (e) { window.onTelegramAuth = undefined; }
-    log('Component unmounted, cleaned up');
-  } catch (e) {
-    log('onBeforeUnmount cleanup error:', e);
-  }
+  if (pollTimer) clearInterval(pollTimer);
+  removeWidgetScript();
+  delete window.TelegramLoginWidget;
+  delete window.onTelegramAuth;
+  log('Component unmounted, cleaned up');
 });
 
-// При монтировании — восстанавливаем сессию из localStorage или вставляем виджет
+// Инициализация при монтировании
 onMounted(() => {
-  log('Component mounted — starting init');
+  log('Component mounted, init start');
+  const sUser = localStorage.getItem('user');
+  const sToken = localStorage.getItem('token');
 
-  try {
-    const storedUser = localStorage.getItem('user');
-    const storedToken = localStorage.getItem('token');
-
-    if (storedUser && storedToken) {
-      try {
-        user.value = JSON.parse(storedUser);
-        setAuthToken(storedToken);
-        log('Restored user from localStorage:', user.value);
-        // Если восстановился — не вставляем виджет (кнопка скрыта)
-        return;
-      } catch (e) {
-        log('Error parsing stored user/token, clearing and continuing:', e);
-        clearSessionClientSide();
-      }
+  if (sUser && sToken) {
+    try {
+      user.value = JSON.parse(sUser);
+      setAuthToken(sToken);
+      log('Restored user from storage:', user.value);
+      return; // пользователь уже есть, не вставляем виджет
+    } catch (e) {
+      log('Error parsing stored user/token:', e);
+      clearSessionClientSide();
     }
-  } catch (e) {
-    log('Error reading localStorage:', e);
   }
 
-  // Если пользователь не найден — вставляем виджет (с retry)
+  // Если нет сохранённого user — вставляем виджет
   ensureWidgetInsertedWithRetry();
 });
 </script>
@@ -220,13 +182,13 @@ onMounted(() => {
 }
 .user-block {
   display: flex;
-  gap: 1rem;
   align-items: center;
+  gap: 1rem;
 }
 button {
   padding: 0.4rem 0.8rem;
-  border-radius: 6px;
-  background: #efefef;
   border: 1px solid #ccc;
+  background: #eee;
+  border-radius: 4px;
 }
 </style>
