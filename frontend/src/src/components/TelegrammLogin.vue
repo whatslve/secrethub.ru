@@ -74,7 +74,7 @@ onMounted(() => {
   script.setAttribute('data-telegram-login', 'secrethubclubbot')
   script.setAttribute('data-size', 'large')
   script.setAttribute('data-userpic', 'false')
-  script.setAttribute('data-auth-url', 'javascript:onTelegramAuth(user)')
+  script.setAttribute('data-onauth', 'onTelegramAuth(user)')
   script.setAttribute('data-request-access', 'write')
 
   container.appendChild(script)
