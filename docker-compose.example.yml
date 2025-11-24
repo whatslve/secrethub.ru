@@ -34,8 +34,6 @@ services:
     volumes:
       - ./frontend/src:/app   # dev: монтируем код (если хотите билдить в образе — уберите этот том)
     restart: unless-stopped
-    ports:
-      - "${FRONTEND_PORT:-8080}:80"
     environment:
       - VUE_APP_API_URL=http://localhost:${NGINX_PORT:-80}  # в dev внешний nginx на хосте
     depends_on:
