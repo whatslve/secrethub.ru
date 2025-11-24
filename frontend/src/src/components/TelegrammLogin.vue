@@ -2,6 +2,7 @@
   <div>
     <div v-if="!user" id="telegram-login-container"></div>
     <p v-else>Привет, {{ user.name }}!</p>
+    <p>Привет, {{ user }}!</p>
   </div>
 </template>
 
