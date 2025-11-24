@@ -18,35 +18,11 @@ const user = ref(null)
 const log = (...args) =>
     console.log('[TG_AUTH]', new Date().toISOString(), ...args)
 
-// ----------------------
-// ЛОГИКА ВЫХОДА
-// ----------------------
-const logout = () => {
-  log('Logout clicked')
 
-  // 1. очищаем память
-  localStorage.removeItem('user')
-  localStorage.removeItem('token')
-
-  // 2. сбрасываем axios
-  setAuthToken(null)
-
-  // 3. показываем Telegram кнопку
-  user.value = null
-}
-
-onMounted(() => {
-  log('Component mounted — starting init')
-
-  const storedUser = localStorage.getItem('user')
-  const storedToken = localStorage.getItem('token')
-
-  if (storedUser && storedToken) {
-    user.value = JSON.parse(storedUser)
-    setAuthToken(storedToken)
-    log('Loaded user from localStorage:', user.value)
-  }
-
+// --------------------------------------------------
+// ФУНКЦИЯ: вставляет виджет телеграма
+// --------------------------------------------------
+const renderTelegramWidget = () => {
   const container = document.getElementById('telegram-login-container')
 
   if (!container) {
@@ -54,38 +30,10 @@ onMounted(() => {
     return
   }
 
-  // Глобальный обработчик
-  window.onTelegramAuth = async (telegramUser) => {
-    log('Received telegramUser:', telegramUser)
+  // очищаем контейнер, если там что-то было
+  container.innerHTML = ''
 
-    if (!telegramUser || !telegramUser.id) {
-      log('❌ Telegram payload invalid or empty')
-      return
-    }
-
-    try {
-      log('Sending payload to backend:', telegramUser)
-
-      const res = await api.post('/auth/telegram', telegramUser)
-
-      log('Backend response:', res.data)
-
-      const token = res.data.token
-      setAuthToken(token)
-      user.value = res.data.user
-
-      localStorage.setItem('user', JSON.stringify(user.value))
-      localStorage.setItem('token', token)
-
-      log('Saved user and token to localStorage')
-    } catch (err) {
-      log('❌ Backend error:', err.response?.data || err.message)
-    }
-  }
-
-  log('Defined window.onTelegramAuth')
-
-  // вставляем виджет Telegram
+  // создаём скрипт телеграма
   const script = document.createElement('script')
   script.src = 'https://telegram.org/js/telegram-widget.js?7'
   script.async = true
@@ -97,5 +45,79 @@ onMounted(() => {
 
   container.appendChild(script)
   log('Widget appended')
+}
+
+
+// --------------------------------------------------
+// ФУНКЦИЯ: выход из аккаунта
+// --------------------------------------------------
+const logout = () => {
+  log('Logout clicked')
+
+  // вычищаем хранилище
+  localStorage.removeItem('user')
+  localStorage.removeItem('token')
+
+  // сбрасываем axios
+  setAuthToken(null)
+
+  // сбрасываем Vue-состояние
+  user.value = null
+
+  // снова вставляем кнопку Telegram
+  renderTelegramWidget()
+}
+
+
+// --------------------------------------------------
+// КОГДА ПРИШЕЛ PAYLOAD ОТ TELEGRAM
+// --------------------------------------------------
+window.onTelegramAuth = async (telegramUser) => {
+  log('Received telegramUser:', telegramUser)
+
+  if (!telegramUser || !telegramUser.id) {
+    log('❌ Telegram payload invalid')
+    return
+  }
+
+  try {
+    const res = await api.post('/auth/telegram', telegramUser)
+    log('Backend response:', res.data)
+
+    const token = res.data.token
+    const u = res.data.user
+
+    setAuthToken(token)
+    user.value = u
+
+    localStorage.setItem('user', JSON.stringify(u))
+    localStorage.setItem('token', token)
+
+    log('Saved user and token')
+  } catch (err) {
+    log('❌ Backend error:', err.response?.data || err.message)
+  }
+}
+
+
+// --------------------------------------------------
+// КОМПОНЕНТ МОНТИРУЕТСЯ
+// --------------------------------------------------
+onMounted(() => {
+  log('Component mounted')
+
+  // Если есть сохранённый пользователь
+  const storedUser = localStorage.getItem('user')
+  const storedToken = localStorage.getItem('token')
+
+  if (storedUser && storedToken) {
+    user.value = JSON.parse(storedUser)
+    setAuthToken(storedToken)
+    log('Loaded saved user')
+    return
+  }
+
+  // Иначе просто вставляем виджет
+  renderTelegramWidget()
 })
 </script>
