@@ -1,10 +1,16 @@
 <template>
   <div>
-    <!-- контейнер всегда есть, просто скрываем через v-show -->
+    <!--
+      Контейнер для Telegram-виджета всегда присутствует в DOM.
+      Управляем видимостью через v-show, чтобы его можно было
+      безопасно перерисовывать (вставлять/удалять script) без ошибок.
+    -->
     <div id="telegram-login-container" v-show="!user"></div>
 
+    <!-- Блок авторизованного пользователя. v-show оставляет элемент в DOM -->
     <div class="user-block" v-show="user">
-      <p>Привет, {{ user?.name }}!</p> <!-- безопасная навигация -->
+      <!-- Безопасный вывод имени: шаблон рендерит только, когда user !== null -->
+      <p>Привет, {{ user?.name }}!</p>
       <button @click="logout">Выйти</button>
     </div>
   </div>
@@ -12,219 +18,281 @@
 
 <script setup>
 /*
-  Полностью рабочий компонент Telegram Login Widget (callback-mode)
-  - Очень подробные логи (метка [TG_AUTH])
-  - Объявляем window.onTelegramAuth ДО вставки скрипта (ключевой момент)
-  - Пытаемся отправить на бэк через axios, при ошибке делаем fetch-fallback
-  - Сохраняем token/user в localStorage и устанавливаем setAuthToken(token)
-  - Предусмотрен logout
+  Компонент: Telegram Login Widget (callback-mode)
+  -----------------------------------------------
+  Ключевые идеи (в порядке важности):
+  1) Глобальные callback'и (window.onTelegramAuth и window.TelegramLoginWidget.onAuth)
+     регистрируются *до* вставки внешнего скрипта виджета. Это обязательно: виджет будет
+     пытаться вызвать именно эти имена.
+  2) Перед вставкой нового виджета мы очищаем контейнер и удаляем старые callback'и,
+     чтобы не оставлять "подвешенные" обработчики.
+  3) Отправка данных на бэк — сначала пробуем axios (api), затем fallback через fetch
+     на несколько потенциальных URL'ов (удобно при разных baseURL конфигурациях).
+  4) При логауте делаем server-side попытку invalidate токена (если есть роут /logout),
+     но главное — очищаем client-side: localStorage, axios header, user state.
+  5) Для корректного ререндеринга виджета используем маркер script[data-tg-widget] и
+     удаляем предыдущие скрипты и iframe из контейнера.
 */
 
 import { ref, onMounted, onBeforeUnmount } from 'vue';
-import api, { setAuthToken } from '@/plugins/axios.js'; // предполагаем, что плагин есть
+import api, { setAuthToken } from '@/plugins/axios.js';
 
-const TAG = '[TG_AUTH]';
-const log = (...args) => console.log(TAG, new Date().toISOString(), ...args);
-
-const TELEGRAM_BOT = 'secrethubclubbot'; // <- поменяй на свой бот
+// Настройки виджета: бот и URL скрипта.
+// Можно менять TELEGRAM_BOT на имя своего бота.
+const TELEGRAM_BOT = 'secrethubclubbot';
 const WIDGET_SCRIPT_URL = 'https://telegram.org/js/telegram-widget.js?22';
 
+// Состояние пользователя (reactive)
 const user = ref(null);
+
+// Ссылка на последний вставленный <script> виджета (если нужен доступ)
 let widgetScriptEl = null;
 
-// --- Утилиты ---
-function safeJson(obj) {
-  try { return JSON.parse(JSON.stringify(obj)); } catch { return obj; }
-}
+/* ----------------------
+   Утилиты
+   ---------------------- */
 
-function removeExistingWidget() {
+/**
+ * Возвращает глубокую копию объекта, безопасную для логики (без циклов и функций).
+ * Используется при подготовке данных отправки и preview, чтобы избежать побочных эффектов.
+ */
+function safeCopy(obj) {
   try {
-    const container = document.getElementById('telegram-login-container');
-    if (!container) return;
-    // удаляем старые скрипты маркеры
-    const existing = container.querySelectorAll('script[data-tg-widget]');
-    existing.forEach(el => el.remove());
-    // очищаем контейнер (оставляем пустым)
-    container.innerHTML = '';
-    // clean global callbacks (don't throw)
-    try { delete window.onTelegramAuth } catch(e) { window.onTelegramAuth = undefined; }
-    try { delete window.TelegramLoginWidget } catch(e) { window.TelegramLoginWidget = undefined; }
-    widgetScriptEl = null;
-    log('Removed existing widget and callbacks');
-  } catch (e) {
-    log('removeExistingWidget error:', e);
+    return JSON.parse(JSON.stringify(obj));
+  } catch {
+    return obj;
   }
 }
 
-// --- core: callback (объявим до вставки скрипта) ---
-async function onTelegramAuthCallback(telegramUser) {
-  log('onTelegramAuth callback fired, payload:', safeJson(telegramUser));
+/* ----------------------
+   Удаление старого виджета и глобальных callback'ов
+   ---------------------- */
 
+/**
+ * Удаляет всё, что виджет мог создать в контейнере:
+ * - скрипты с маркером data-tg-widget
+ * - iframe (если остался)
+ * - очищает контейнер
+ * - удаляет глобальные обработчики, чтобы избежать дублирования
+ */
+function removeExistingWidget() {
+  const container = document.getElementById('telegram-login-container');
+  if (!container) return;
+
+  // Удаляем отмеченные скрипты (если были)
+  const existingScripts = container.querySelectorAll('script[data-tg-widget]');
+  existingScripts.forEach(el => el.remove());
+
+  // Очищаем контейнер полностью (удаляет iframe и прочее)
+  container.innerHTML = '';
+
+  // Удаляем глобальные callback'и (без throw)
+  try { delete window.onTelegramAuth; } catch (e) { window.onTelegramAuth = undefined; }
+  try { delete window.TelegramLoginWidget; } catch (e) { window.TelegramLoginWidget = undefined; }
+
+  widgetScriptEl = null;
+}
+
+/* ----------------------
+   Главный handler: нажатие кнопки в виджете (Telegram вернёт user payload)
+   ---------------------- */
+
+/**
+ * Функция, которую вызывает Telegram (через window.onTelegramAuth или TelegramLoginWidget.onAuth).
+ * Она:
+ *  - проверяет корректность payload,
+ *  - пытается отправить его на бекенд через axios (api.post('/auth/telegram')),
+ *  - если axios не сработал — выполняет fallback через fetch на ряд возможных URL'ов,
+ *  - при успешном ответе сохраняет token и user в localStorage, вызывает setAuthToken(token) и сохраняет user в reactive state.
+ */
+async function onTelegramAuthCallback(telegramUser) {
+  // Быстрая валидация полезной нагрузки
   if (!telegramUser || !telegramUser.id) {
-    log('Invalid telegram payload — missing id. Payload:', safeJson(telegramUser));
     return;
   }
 
-  // Preview to logs (redact hash)
-  const preview = safeJson(telegramUser);
+  // Подготовка preview (без передачи hash впоследствии)
+  const preview = safeCopy(telegramUser);
   if (preview.hash) preview.hash = '[REDACTED]';
-  log('Prepared payload preview:', preview);
 
-  // First try axios (relative path — ваш axios может иметь baseURL /api)
+  // Попытка 1: axios (api) — предполагается, что api уже настроен с baseURL '/api' или корнем
   try {
-    log('Attempting axios POST to /auth/telegram');
     const res = await api.post('/auth/telegram', telegramUser);
-    log('Axios POST success — status:', res.status, 'data:', res.data);
-
-    if (res.data?.token && res.data?.user) {
+    if (res?.data?.token && res?.data?.user) {
       setAuthToken(res.data.token);
       localStorage.setItem('token', res.data.token);
       localStorage.setItem('user', JSON.stringify(res.data.user));
       user.value = res.data.user;
-      log('Login success (axios). User saved:', res.data.user);
       return;
-    } else {
-      log('Axios returned without token/user:', res.data);
     }
+    // если ответ есть, но без токена — продолжаем на fallback
   } catch (axErr) {
-    log('Axios POST failed:', axErr?.response?.status || '(no status)', axErr?.response?.data || axErr.message || axErr);
+    // axios мог упасть — переходим к fetch fallback
   }
 
-  // Fallback: try fetch to several likely URLs
-  const fallbackUrls = [
-    '/auth/telegram',
-    '/api/auth/telegram',
-    // если в api.defaults.baseURL установлен например '/api'
+  // Попытка 2: fetch fallback на ряд возможных URL'ов
+  const candidateUrls = [
+    '/auth/telegram',           // относительный корень (если фронт и бэк proxied)
+    '/api/auth/telegram',       // традиционный API путь
     (api?.defaults?.baseURL ? api.defaults.baseURL.replace(/\/$/, '') + '/auth/telegram' : null),
     (api?.defaults?.baseURL ? api.defaults.baseURL.replace(/\/$/, '') + '/api/auth/telegram' : null)
   ].filter(Boolean);
 
-  for (const url of fallbackUrls) {
+  for (const url of candidateUrls) {
     try {
-      log('Fetch fallback trying URL:', url);
       const fRes = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(telegramUser),
-        credentials: 'include' // если Sanctum по cookie
+        credentials: 'include' // если используется cookie-based auth (Sanctum)
       });
       const text = await fRes.text();
       let jsonBody = null;
-      try { jsonBody = text ? JSON.parse(text) : null; } catch(e) { jsonBody = text; }
-      log('Fetch result', url, 'status:', fRes.status, 'body:', jsonBody);
+      try { jsonBody = text ? JSON.parse(text) : null; } catch { jsonBody = text; }
 
       if (fRes.ok && jsonBody?.token && jsonBody?.user) {
-        log('Fetch returned token+user — saving session');
         setAuthToken(jsonBody.token);
         localStorage.setItem('token', jsonBody.token);
         localStorage.setItem('user', JSON.stringify(jsonBody.user));
         user.value = jsonBody.user;
         return;
-      } else {
-        log('Fetch did not return token/user for', url, 'body:', jsonBody);
       }
+      // иначе пробуем следующий URL
     } catch (fe) {
-      log('Fetch attempt failed for', url, fe?.message || fe);
+      // fetch провалился — пробуем следующий URL
     }
   }
 
-  log('All attempts to send payload to backend finished — no successful auth');
+  // Если дошли сюда — ни один из способов не дал токен; функция завершается без изменения state
 }
 
-// Экспортируем на window именно имя, которого требует виджет
+/* ----------------------
+   Регистрация глобальных callback'ов — обязательно до загрузки скрипта виджета.
+   ---------------------- */
+
+/**
+ * Регистрируем window.onTelegramAuth и window.TelegramLoginWidget.onAuth.
+ * Виджет может вызывать любое из этих имён — регистрируем оба для совместимости.
+ */
 function registerGlobalCallback() {
-  // обязательно устанавливать ДО вставки скрипта виджета
-  try {
-    window.onTelegramAuth = (u) => onTelegramAuthCallback(u);
-    // для совместимости: Telegram иногда использует объект TelegramLoginWidget
-    window.TelegramLoginWidget = { onAuth: (u) => onTelegramAuthCallback(u) };
-    log('Registered global callbacks: window.onTelegramAuth and window.TelegramLoginWidget.onAuth');
-  } catch (e) {
-    log('registerGlobalCallback error:', e);
-  }
+  window.onTelegramAuth = (u) => { onTelegramAuthCallback(u); };
+  window.TelegramLoginWidget = { onAuth: (u) => onTelegramAuthCallback(u) };
 }
 
-// --- вставка скрипта ---
+/* ----------------------
+   Вставка скрипта виджета в DOM
+   ---------------------- */
+
+/**
+ * Вставляет <script> виджета в контейнер.
+ * Метод:
+ *  - удаляет старые артефакты,
+ *  - регистрирует глобальные callback'и,
+ *  - создаёт <script data-tg-widget> и добавляет атрибуты для виджета.
+ * Возвращает true/false в зависимости от успешности вставки.
+ */
 function insertWidgetScript() {
-  try {
-    const container = document.getElementById('telegram-login-container');
-    if (!container) {
-      log('insertWidgetScript: container not found');
-      return false;
-    }
+  const container = document.getElementById('telegram-login-container');
+  if (!container) return false;
 
-    // очистка перед вставкой
-    removeExistingWidget();
+  // Удаляем предыдущий виджет и callback'и
+  removeExistingWidget();
 
-    // регистрируем глобальные функции *перед* загрузкой скрипта
-    registerGlobalCallback();
+  // Регистрируем глобальные функции *перед* загрузкой внешнего скрипта
+  registerGlobalCallback();
 
-    const script = document.createElement('script');
-    script.src = WIDGET_SCRIPT_URL;
-    script.async = true;
-    script.setAttribute('data-tg-widget', '1'); // маркер
-    script.setAttribute('data-telegram-login', TELEGRAM_BOT);
-    script.setAttribute('data-size', 'large');
-    script.setAttribute('data-request-access', 'write');
-    // callback-mode — обязательно onauth, аргумент must be (user)
-    script.setAttribute('data-onauth', 'onTelegramAuth(user)');
-    // optional: hide userphoto if wanted
-    // script.setAttribute('data-userpic', 'false');
+  // Создаём сам скрипт виджета
+  const script = document.createElement('script');
 
-    script.onload = () => {
-      log('Widget script loaded (onload). src:', script.src);
-      // через таймаут проверим, создал ли виджет iframe
-      setTimeout(() => {
-        try {
-          const iframe = container.querySelector('iframe');
-          log('Widget iframe present?', !!iframe, 'iframe:', iframe);
-        } catch (e) {
-          log('Iframe check error:', e);
-        }
-      }, 300);
-    };
+  // Важно: используем постоянный URL виджета. Можно при необходимости добавлять cache-buster.
+  script.src = WIDGET_SCRIPT_URL;
+  script.async = true;
 
-    script.onerror = (e) => {
-      log('Widget script failed to load (onerror):', e);
-    };
+  // Маркер, чтобы мы могли легко найти и удалить этот скрипт позже
+  script.setAttribute('data-tg-widget', '1');
 
-    container.appendChild(script);
-    widgetScriptEl = script;
-    log('Appended Telegram widget script:', script.src);
-    return true;
-  } catch (e) {
-    log('insertWidgetScript error:', e);
-    return false;
-  }
+  // Стандартные атрибуты виджета
+  script.setAttribute('data-telegram-login', TELEGRAM_BOT);
+  script.setAttribute('data-size', 'large');
+  script.setAttribute('data-request-access', 'write');
+
+  /*
+    Callback-mode: Telegram ожидaет, что в атрибуте data-onauth будет инструкция вызвать глобальную
+    функцию с аргументом user, например: data-onauth="onTelegramAuth(user)".
+    Поэтому мы регистрируем window.onTelegramAuth (см. registerGlobalCallback выше).
+  */
+  script.setAttribute('data-onauth', 'onTelegramAuth(user)');
+
+  // По желанию можно скрыть userpic: script.setAttribute('data-userpic', 'false');
+
+  // Поведение при загрузке скрипта: проверяем, создал ли он iframe (виджет часто вставляет iframe)
+  script.onload = () => {
+    // проверка iframe делается "про запас" — не логируем ничего на клиенте
+    setTimeout(() => {
+      try {
+        const iframe = container.querySelector('iframe');
+        // если нужно — можно выставить флаг состояния или отправить телеметрию на бэк
+        // но в этом компоненте мы просто выполняем проверку молча
+      } catch (e) {
+        // игнорируем ошибки проверки iframe
+      }
+    }, 300);
+  };
+
+  // Обработчик ошибок загрузки: можно реализовать fallback URL или retry
+  script.onerror = () => {
+    // в текущей реализации retry не делается — можно реализовать при желании
+  };
+
+  // Вставляем скрипт в контейнер
+  container.appendChild(script);
+  widgetScriptEl = script;
+  return true;
 }
 
-// --- Logout ---
+/* ----------------------
+   Logout
+   ---------------------- */
+
+/**
+ * Logout:
+ *  - опционально шлём серверный POST /logout (если такая логика реализована),
+ *  - очищаем client-side state: localStorage, токен axios, reactive user,
+ *  - удаляем виджет и вставляем заново для возможности повторной авторизации.
+ */
 async function logout() {
-  log('Logout');
+  // Попытка server-side logout (если нет роута — ловим ошибку и продолжаем)
   try {
-    // optional backend logout
     await api.post('/logout');
-    log('Backend logout request sent (if route exists)');
   } catch (e) {
-    log('Backend logout failed or not implemented:', e?.response?.status, e?.response?.data || e?.message || e);
+    // если роут не существует или сервер отдал ошибку — продолжаем очистку клиентской сессии
   }
 
-  // client-side clear
+  // Client-side очистка
   try {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     setAuthToken(null);
     user.value = null;
+
+    // Удаляем старый виджет и глобальные callback'и
     removeExistingWidget();
-    // reinject widget so user can login again
+
+    // Повторно вставляем виджет, чтобы кнопка "Войти" снова появилась
     insertWidgetScript();
-    log('Client session cleared and widget re-rendered');
   } catch (e) {
-    log('logout cleanup error:', e);
+    // игнорируем ошибки очистки
   }
 }
 
-// --- helper для ручного теста из консоли ---
+/* ----------------------
+   Тестовый вызов из консоли (опционально)
+   ---------------------- */
+
+/**
+ * window.__tg_test_invoke() — удобная тестовая утилита для development.
+ * В production её можно удалить; оставлена здесь для удобства тестирования.
+ */
 window.__tg_test_invoke = function fakeAuth() {
   const sample = {
     id: 100155858,
@@ -235,35 +303,41 @@ window.__tg_test_invoke = function fakeAuth() {
     auth_date: String(Math.floor(Date.now() / 1000)),
     hash: 'TEST_HASH'
   };
-  log('Manual test invoke (window.__tg_test_invoke) sending sample:', sample);
-  // вызовем глобальную handler'у
+  // вызываем глобальный обработчик, если он зарегистрирован
   try {
     if (window.onTelegramAuth) window.onTelegramAuth(sample);
     else if (window.TelegramLoginWidget && window.TelegramLoginWidget.onAuth) window.TelegramLoginWidget.onAuth(sample);
-    else log('No global handler registered');
   } catch (e) {
-    log('Manual test invoke error:', e);
+    // игнорируем ошибки тестовой отправки
   }
 };
 
-// --- lifecycle ---
+/* ----------------------
+   Lifecycle hooks
+   ---------------------- */
+
+/**
+ * На unmount делаем аккуратный cleanup: удаляем скрипт, global callbacks и т.д.
+ */
 onBeforeUnmount(() => {
   try {
     removeExistingWidget();
     if (widgetScriptEl) widgetScriptEl.remove();
-    // clean global
-    try { delete window.onTelegramAuth; } catch(e) { window.onTelegramAuth = undefined; }
-    try { delete window.TelegramLoginWidget; } catch(e) { window.TelegramLoginWidget = undefined; }
-    log('Component unmounted - cleaned');
+    try { delete window.onTelegramAuth; } catch (e) { window.onTelegramAuth = undefined; }
+    try { delete window.TelegramLoginWidget; } catch (e) { window.TelegramLoginWidget = undefined; }
   } catch (e) {
-    log('onBeforeUnmount error:', e);
+    // игнорируем ошибки cleanup
   }
 });
 
+/**
+ * При монтировании компонента:
+ * 1) Сначала пытаемся восстановить сессию из localStorage (token + user).
+ *    Если восстановление успешно — не вставляем виджет (пользователь уже авторизован).
+ * 2) Если восстановления нет — вставляем виджет (callback-mode).
+ */
 onMounted(() => {
-  log('Component mounted');
-
-  // try restore session
+  // Попытка восстановить сессию из localStorage
   try {
     const sToken = localStorage.getItem('token');
     const sUser = localStorage.getItem('user');
@@ -271,20 +345,20 @@ onMounted(() => {
       try {
         user.value = JSON.parse(sUser);
         setAuthToken(sToken);
-        log('Restored user from localStorage:', user.value);
-        return; // если восстановили — не вставляем виджет
+        // Если восстановили — не вставляем виджет
+        return;
       } catch (e) {
-        log('Error parsing stored user/token, clearing:', e);
-        localStorage.removeItem('token'); localStorage.removeItem('user');
+        // Если данные повреждены — очищаем и продолжаем вставку виджета
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
       }
     }
   } catch (e) {
-    log('Error reading localStorage:', e);
+    // Если localStorage недоступен — продолжаем вставку виджета
   }
 
-  // вставляем виджет (callback-mode)
-  const ok = insertWidgetScript();
-  if (!ok) log('insertWidgetScript returned false');
+  // Вставляем виджет в контейнер (callback-mode).
+  insertWidgetScript();
 });
 </script>
 
