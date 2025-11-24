@@ -373,8 +373,8 @@ onMounted(() => {
 }
 button {
   padding: 0.4rem 0.8rem;
-  border: 1px solid #ccc;
-  background: #eee;
+  border: 1px solid #3855da;
+  background: #2542dc;
   border-radius: 4px;
 }
 </style>
