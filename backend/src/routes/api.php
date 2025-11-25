@@ -18,3 +18,6 @@ Route::middleware('auth:sanctum')->post('/logout', function (Request $request) {
 
     return response()->json(['message' => 'Logged out']);
 });
+if(file_exists(base_path('routes/fake_api.php'))) {
+    require_once base_path('routes/fake_api.php');
+}

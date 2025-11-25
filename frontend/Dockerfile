@@ -2,16 +2,16 @@
 FROM node:20-bullseye AS build
 WORKDIR /app
 
-# Копируем package.json и package-lock.json из src
-COPY src/package*.json ./
-
-# Копируем весь src
-COPY src/ ./
+# Копируем package.json и package-lock.json
+COPY package*.json ./
 
 # Устанавливаем зависимости
 RUN npm install
 
-# Билдим проект
+# Копируем весь проект
+COPY . .
+
+# Сборка
 RUN npm run build
 
 # Stage nginx

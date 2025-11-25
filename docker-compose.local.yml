@@ -1,0 +1,82 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        UID: ${UID}   # UID твоего пользователя на хосте
+        GID: ${GID}   # GID твоей группы
+    container_name: ${BACKEND_CONTAINER_NAME:-laravel}
+    restart: unless-stopped
+    expose:
+      - "9000"    # доступно в docker-сети
+    volumes:
+      - ./backend/src:/var/www   # для разработки: монтируем исходники (перезапишет содержимое образа)
+    environment:
+      - APP_ENV=local
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_DATABASE=${DB_DATABASE}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - QUEUE_CONNECTION=${QUEUE_CONNECTION}
+    depends_on:
+      - db
+      - redis
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: ${FRONTEND_CONTAINER_NAME:-vue_app}
+    volumes:
+      - ./frontend/src:/app   # dev: монтируем код (если хотите билдить в образе — уберите этот том)
+    restart: unless-stopped
+    environment:
+      - VUE_APP_API_URL=http://localhost:${NGINX_PORT:-80}  # в dev внешний nginx на хосте
+    depends_on:
+      - backend
+
+  nginx:
+    image: nginx:alpine
+    container_name: ${NGINX_CONTAINER_NAME:-nginx}
+    restart: unless-stopped
+    ports:
+      - "${NGINX_PORT:-80}:80"
+    volumes:
+      - ./nginx/default.local.conf:/etc/nginx/conf.d/default.local.conf:ro
+      - ./frontend/src/dist:/usr/share/nginx/html:ro
+    depends_on:
+      - frontend
+      - backend
+
+  db:
+    image: postgres:15-alpine
+    container_name: ${DB_CONTAINER_NAME:-postgres}
+    environment:
+      POSTGRES_DB: ${DB_DATABASE}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: ${REDIS_CONTAINER_NAME:-redis}
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: ${RABBITMQ_CONTAINER_NAME:-rabbitmq}
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+
+volumes:
+  db_data:
