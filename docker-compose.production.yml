@@ -60,16 +60,12 @@ services:
 
   nginx:
     image: nginx:alpine
-    container_name: ${NGINX_CONTAINER_NAME:-nginx}
+    container_name: nginx
     restart: unless-stopped
     volumes:
       - ./nginx/default.production.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./frontend/dist:/usr/share/nginx/html:ro
     depends_on:
       - frontend
-      - backend
-    expose:
-      - "80"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.myapp.rule=Host(`secrethub.club`)"
