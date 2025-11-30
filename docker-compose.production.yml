@@ -36,7 +36,7 @@ services:
     expose:
       - "9000"    # доступно в docker-сети
     volumes:
-      - ./backend/src:/var/www   # для разработки: монтируем исходники (перезапишет содержимое образа)
+      - ./backend/src:/var/www/src   # для разработки: монтируем исходники (перезапишет содержимое образа)
     environment:
       - APP_ENV=local
       - DB_HOST=${DB_HOST}
