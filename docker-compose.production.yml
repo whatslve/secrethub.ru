@@ -68,7 +68,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./nginx/default.production.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./frontend/src/dist:/usr/share/nginx/html:ro
+      - ./frontend/dist:/usr/share/nginx/html:ro
     depends_on:
       - frontend
       - backend
