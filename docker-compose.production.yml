@@ -57,6 +57,12 @@ services:
     restart: unless-stopped
     environment:
       - VUE_APP_API_URL=http://localhost:${NGINX_PORT:-80}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=Host(`secrethub.club`)"
+      - "traefik.http.routers.frontend.entrypoints=websecure"
+      - "traefik.http.routers.frontend.tls=true"
+      - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
 
   nginx:
     image: nginx:alpine
