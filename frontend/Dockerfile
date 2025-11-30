@@ -1,17 +1,9 @@
 # Stage сборки
 FROM node:20-bullseye AS build
 WORKDIR /app
-
-# Копируем package.json и package-lock.json
 COPY package*.json ./
-
-# Устанавливаем зависимости
 RUN npm install
-
-# Копируем все исходники
 COPY . .
-
-# Сборка
 RUN npm run build
 
 # Stage nginx
