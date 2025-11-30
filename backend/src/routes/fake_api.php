@@ -1,4 +1,2 @@
 <?php
-Route::get('/test', function(){
-   var_dump('test');
-});
+Route::post('fake/auth', [\App\Http\Controllers\Auth\FakeAuthController::class, 'loginTGFake']);

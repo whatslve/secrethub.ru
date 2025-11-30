@@ -29,13 +29,17 @@ services:
   frontend:
     build:
       context: ./frontend
-      dockerfile: Dockerfile
-    container_name: ${FRONTEND_CONTAINER_NAME:-vue_app}
+      dockerfile: Dockerfile-dev
+    container_name: vue_app
     volumes:
-      - ./frontend/dist:/usr/share/nginx/html:ro  # теперь только билд
-    restart: unless-stopped
+      - ./frontend:/app
+      - /app/node_modules
+      - ./frontend/.env.local:/app/.env.local  # монтируем env
+    ports:
+      - "5173:5173"
     environment:
-      - VUE_APP_API_URL=http://localhost:${NGINX_PORT:-80}
+      - NODE_ENV=development  # обязательно для Vite
+    command: npm run dev
     depends_on:
       - backend
 

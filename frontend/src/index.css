@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* глобальные цвета страницы, переключаются по классу `dark` на <html> */
+:root {
+    /* светлая страница по умолчанию */
+    --page-bg: #ffffff;
+    --page-text: #111827; /* gray-900 */
+}
+
+html.dark {
+    /* тёмная страница */
+    --page-bg: #0b1220;  /* очень тёмный */
+    --page-text: #e6eef8; /* светлый текст */
+}
+
+/* используем переменные для body и основного контейнера */
+body {
+    background-color: var(--page-bg);
+    color: var(--page-text);
+    transition: background-color 200ms, color 200ms;
+}
+
+/* пример: если у тебя есть #app, чтобы контент не прятался под фиксированным header */
+#app {
+    padding-top: 3.5rem; /* высота header h-14 = 3.5rem */
+}
